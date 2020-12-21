@@ -105,13 +105,13 @@ def get_merged_line(lines, line_a, rho_distance, degree_distance):
     return line_a
 
 
-def get_image_as_black_and_white(img):
+def get_image_as_black_and_white(img, marker=200):
     """ Returns a binary image with adaptive threshold.
     """
     # We use blocksize 7 for region size and 4 as constant to subtract from the Gaussian weighted sum
     # https://docs.opencv.org/3.4/d7/d4d/tutorial_py_thresholding.html
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    ret, thresh = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY_INV)
+    ret, thresh = cv2.threshold(gray, marker, 255, cv2.THRESH_BINARY_INV)
     return thresh
 
 
@@ -177,12 +177,25 @@ def get_biggest_contour(img, img_adaptive_binary):
 
     img_raw_contour = cv_utils.get_rotated_image_from_contour(img, biggest_contour)
 
-    cv_utils.show_window('img_raw_contour', img_raw_contour)
+    img_raw_contour_rotated = resize_to_right_ratio(img_raw_contour)
+    img_raw_black_and_white = get_image_as_black_and_white(img_raw_contour_rotated)
+
+    return img_raw_contour_rotated, img_raw_black_and_white
+
+
+def get_biggest_contour2(img, img_adaptive_binary):
+    # Find the biggest outer contour to locate the Yatzy Sheet. We use RETR_EXTERNAL and discard nested contours.
+    contours = cv_utils.get_external_contours(img_adaptive_binary)
+    biggest_contour = cv_utils.get_biggest_intensity_contour(contours)
+
+    img_raw_contour = cv_utils.get_rotated_image_from_contour(img, biggest_contour, rotation=270)
+
+    cv_utils.show_window('img_raw_contour_222', img_raw_contour)
 
     img_raw_contour_rotated = resize_to_right_ratio(img_raw_contour)
-    img_binary_sheet_rotated = get_image_as_black_and_white(img_raw_contour_rotated)
+    img_raw_black_and_white = get_image_as_black_and_white(img_raw_contour_rotated)
 
-    return img_raw_contour_rotated, img_binary_sheet_rotated
+    return img_raw_contour_rotated, img_raw_black_and_white
 
 
 def generate_ti_sheet(img, num_rows_in_grid=19, max_num_cols=20):
@@ -192,13 +205,23 @@ def generate_ti_sheet(img, num_rows_in_grid=19, max_num_cols=20):
     cv_utils.show_window('img_black_and_white', image_as_black_and_white)
 
     # Find the biggest contour and rotate it
-    img_raw_contour_rotated, img_binary_sheet_rotated = get_biggest_contour(img, image_as_black_and_white)
+    img_raw_contour_rotated, img_raw_black_and_white = get_biggest_contour(img, image_as_black_and_white)
 
     cv_utils.show_window("raw_contour_rotated", img_raw_contour_rotated)
-    cv_utils.show_window("img_binary_yatzy_sheet", img_binary_sheet_rotated)
+    cv_utils.show_window("img_raw_b_w", img_raw_black_and_white)
+
+    image_as_black_and_white = get_image_as_black_and_white(img_raw_contour_rotated, marker=50)
+    cv_utils.show_window('img_black_and_white_2', image_as_black_and_white)
+
+    img_raw_contour_rotated, img_raw_black_and_white = get_biggest_contour2(img_raw_contour_rotated,
+                                                                            image_as_black_and_white)
+
+    cv_utils.show_window("raw_contour_rotated_2", img_raw_contour_rotated)
+    cv_utils.show_window("img_raw_b_w", img_raw_contour_rotated)
+
 
     # Get a painted grid with vertical / horizontal lines
-    img_binary_grid, img_binary_only_numbers = get_yatzy_grid(img_binary_sheet_rotated)
+    img_binary_grid, img_binary_only_numbers = get_yatzy_grid(img_raw_black_and_white)
 
     # Get every yatzy grid cell as a sorted bounding rect in order to later locate numbers to correct cell
     yatzy_cells_bounding_rects, grid_bounding_rect = get_yatzy_cells_bounding_rects(img_binary_grid, num_rows_in_grid, max_num_cols)

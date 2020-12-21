@@ -43,7 +43,7 @@ def get_contour_area_from_img(img, contour):
     return get_bounding_rect_content(img, cv2.boundingRect(contour))
 
 
-def get_rotated_image_from_contour(img, contour):
+def get_rotated_image_from_contour(img, contour, rotation=90):
     """ Returns a rotated version of img based on cv2.minAreaRect of contour.
 
         First side, (i.e most left to top edge) is always "Width" from minAreaRect.
@@ -76,7 +76,7 @@ def get_rotated_image_from_contour(img, contour):
 
     img_debug = img.copy()
     cv2.drawContours(img_debug, [np.int0(rect_box_points)], 0, (0, 255, 255), 3)
-    show_window('min_area_rect_original_image', img_debug)
+    # show_window('min_area_rect_original_image', img_debug)
 
     # Prepare for rotation transformation
     src_pts = rect_box_points.astype("float32")
@@ -90,7 +90,7 @@ def get_rotated_image_from_contour(img, contour):
     ROTATION_MAT = cv2.getAffineTransform(src_pts[:3], dst_pts)
     rotated =  cv2.warpAffine(
         img, ROTATION_MAT, (width, height))
-    return ndimage.rotate(rotated, 90)
+    return ndimage.rotate(rotated, rotation)
 
 
 def get_com_shift(img):
