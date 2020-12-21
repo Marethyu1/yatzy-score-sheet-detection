@@ -41,7 +41,8 @@ def resize_to_right_ratio(img, interpolation=cv2.INTER_LINEAR, width=750):
     """ Set ratio to resize to width """
     ratio_width = width / img.shape[1]
     # Resize
-    return cv2.resize(img, None, fx=ratio_width, fy=ratio_width, interpolation=interpolation)
+    return img
+    # return cv2.resize(img, None, fx=ratio_width, fy=ratio_width, interpolation=interpolation)
 
 
 def merge_lines(line_a, line_b):
@@ -104,21 +105,14 @@ def get_merged_line(lines, line_a, rho_distance, degree_distance):
     return line_a
 
 
-def get_adaptive_binary_image(img):
+def get_image_as_black_and_white(img):
     """ Returns a binary image with adaptive threshold.
     """
-    # Convert to grayscale
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-    # Apply Gaussian filter for smoothing effect of shadows etc. before adaptive threshold
-    # We use 5x5 kernel with Sigma = 0, which gives us StD = 0.3*((ksize-1)*0.5 - 1) + 0.8
-    # See https://docs.opencv.org/2.4/modules/imgproc/doc/filtering.html?highlight=gaussianblur#Mat%20getGaussianKernel(int%20ksize,%20double%20sigma,%20int%20ktype)
-    gray = cv2.GaussianBlur(gray, (5, 5), 0)
-
-    # We use Adaptive threshold to get threshold values based on different regions.
     # We use blocksize 7 for region size and 4 as constant to subtract from the Gaussian weighted sum
     # https://docs.opencv.org/3.4/d7/d4d/tutorial_py_thresholding.html
-    return cv2.adaptiveThreshold(gray, 255,  cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 7, 4)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    ret, thresh = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY_INV)
+    return thresh
 
 
 def merge_nearby_lines(lines, rho_distance=30, degree_distance=20):
@@ -176,40 +170,43 @@ def sort_by_upper_left_pos(rect_a, rect_b):
     return (x_a - x_b_offset_positive)
 
 
-def get_rotated_yatzy_sheet(img, img_adaptive_binary):
+def get_biggest_contour(img, img_adaptive_binary):
     # Find the biggest outer contour to locate the Yatzy Sheet. We use RETR_EXTERNAL and discard nested contours.
     contours = cv_utils.get_external_contours(img_adaptive_binary)
     biggest_contour = cv_utils.get_biggest_intensity_contour(contours)
 
-    img_raw_yatzy_sheet = cv_utils.get_rotated_image_from_contour(img, biggest_contour)
+    img_raw_contour = cv_utils.get_rotated_image_from_contour(img, biggest_contour)
 
-    cv_utils.show_window("img_raw_yatzy_sheet", img_raw_yatzy_sheet)
+    cv_utils.show_window('img_raw_contour', img_raw_contour)
 
-    img_raw_yatzy_sheet = resize_to_right_ratio(img_raw_yatzy_sheet)
-    img_binary_sheet_rotated = get_adaptive_binary_image(img_raw_yatzy_sheet)
+    img_raw_contour_rotated = resize_to_right_ratio(img_raw_contour)
+    img_binary_sheet_rotated = get_image_as_black_and_white(img_raw_contour_rotated)
 
-    return img_raw_yatzy_sheet, img_binary_sheet_rotated
+    return img_raw_contour_rotated, img_binary_sheet_rotated
 
 
-def generate_yatzy_sheet(img, num_rows_in_grid=19, max_num_cols=20):
+def generate_ti_sheet(img, num_rows_in_grid=19, max_num_cols=20):
     img = resize_to_right_ratio(img)
-    img_adaptive_binary = get_adaptive_binary_image(img)
+    image_as_black_and_white = get_image_as_black_and_white(img)
 
-    cv_utils.show_window('img_adaptive_binary', img_adaptive_binary)
+    cv_utils.show_window('img_black_and_white', image_as_black_and_white)
 
     # Find the biggest contour and rotate it
-    img_yatzy_sheet, img_binary_yatzy_sheet = get_rotated_yatzy_sheet(img, img_adaptive_binary)
+    img_raw_contour_rotated, img_binary_sheet_rotated = get_biggest_contour(img, image_as_black_and_white)
+
+    cv_utils.show_window("raw_contour_rotated", img_raw_contour_rotated)
+    cv_utils.show_window("img_binary_yatzy_sheet", img_binary_sheet_rotated)
 
     # Get a painted grid with vertical / horizontal lines
-    img_binary_grid, img_binary_only_numbers = get_yatzy_grid(img_binary_yatzy_sheet)
+    img_binary_grid, img_binary_only_numbers = get_yatzy_grid(img_binary_sheet_rotated)
 
     # Get every yatzy grid cell as a sorted bounding rect in order to later locate numbers to correct cell
     yatzy_cells_bounding_rects, grid_bounding_rect = get_yatzy_cells_bounding_rects(img_binary_grid, num_rows_in_grid, max_num_cols)
 
     # Get the area of the yatzy grid from different versions of raw img
     img_binary_only_numbers = cv_utils.get_bounding_rect_content(img_binary_only_numbers, grid_bounding_rect)
-    img_binary_yatzy_sheet = cv_utils.get_bounding_rect_content(img_binary_yatzy_sheet, grid_bounding_rect)
-    img_yatzy_sheet = cv_utils.get_bounding_rect_content(img_yatzy_sheet, grid_bounding_rect)
+    img_binary_yatzy_sheet = cv_utils.get_bounding_rect_content(img_binary_sheet_rotated, grid_bounding_rect)
+    img_yatzy_sheet = cv_utils.get_bounding_rect_content(img_raw_contour_rotated, grid_bounding_rect)
 
     return img_yatzy_sheet, img_binary_yatzy_sheet, img_binary_only_numbers, yatzy_cells_bounding_rects
 
@@ -241,8 +238,8 @@ def get_yatzy_grid(img_binary_sheet):
     # Erosion: If the structuring element can fit inside the forground pixel(white), then keep white, else set to black
     # Dilation: For every background pixel(black), if one of the foreground(white) pixels are present, set this background (black) to foreground.
 
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
-    img_binary_sheet_morphed = cv2.morphologyEx(img_binary_sheet_morphed, cv2.MORPH_DILATE, kernel)
+    # kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+    # img_binary_sheet_morphed = cv2.morphologyEx(img_binary_sheet_morphed, cv2.MORPH_DILATE, kernel)
 
     cv_utils.show_window('morph_dilate_binary_img', img_binary_sheet_morphed)
 
@@ -250,7 +247,7 @@ def get_yatzy_grid(img_binary_sheet):
     sheet_binary_grid_vertical = img_binary_sheet_morphed.copy()
 
     # We use relative length for the structuring line in order to be dynamic for multiple sizes of the sheet.
-    structuring_line_size = int(width / 5.0)
+    structuring_line_size = int(width / 3.0)
 
     # Try to remove all vertical stuff in the image,
     element = cv2.getStructuringElement(cv2.MORPH_RECT, (structuring_line_size, 1))
@@ -274,40 +271,22 @@ def get_yatzy_grid(img_binary_sheet):
         Hough transform identifies points (x,y) on the same line. 
 
     """
-    # We ideally should choose np.pi / 2 for the Theta accumulator, since we only want lines in 90 degrees and 0 degrees.
-    rho_accumulator = 1
-    angle_accumulator = np.pi / 2
-    # Min vote for defining a line
-    threshold_accumulator_votes = int(width/2)
-
-    # Find lines in the image according to the Hough Algorithm
-    grid_lines = cv2.HoughLines(img_binary_sheet_morphed, rho_accumulator,
-                                angle_accumulator, threshold_accumulator_votes)
-
     img_binary_grid = np.zeros(
         img_binary_sheet_morphed.shape, dtype=img_binary_sheet_morphed.dtype)
 
     # Since we can have multiple lines for same grid line, we merge nearby lines
-    grid_lines = merge_nearby_lines(grid_lines)
+    # grid_lines = merge_nearby_lines(grid_lines)
 
-    draw_lines(grid_lines, img_binary_grid)
+    # draw_lines(grid_lines, img_binary_grid)
 
     # Since all sheets does not have outerborders. We draw a rectangle around the
-    outer_border = np.array([
-        [1, height-1],  # Bottom Left
-        [1, 1],  # Top Left
-        [width-1, 1],  # Top Right
-        [width-1, height-1]  # Bottom Right
-    ])
-    cv2.drawContours(img_binary_grid, [outer_border], 0, (255, 255, 255), 3)
-
     # Remove the grid from the binary image an keep only the digits.
     img_binary_sheet_only_digits = cv2.bitwise_and(img_binary_sheet, 255 - img_binary_sheet_morphed)
 
-    cv_utils.show_window("yatzy_grid_binary_lines", img_binary_grid)
-    cv_utils.show_window("yatzy_grid_binary_lines_2", img_binary_sheet_only_digits)
+    cv_utils.show_window("yatzy_grid_binary_lines_2", img_binary_sheet_morphed)
+    cv_utils.show_window("img_binary_sheet_only_digits", img_binary_sheet_only_digits)
 
-    return img_binary_grid, img_binary_sheet_only_digits
+    return img_binary_sheet_morphed, img_binary_sheet_only_digits
 
 
 def __filter_by_dim(val, target_width, target_height):

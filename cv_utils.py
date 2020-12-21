@@ -2,8 +2,9 @@
 import cv2
 import os
 import numpy as np
+from scipy import ndimage
 
-DEBUG = False
+DEBUG = True
 
 
 def set_debug(debug):
@@ -51,7 +52,6 @@ def get_rotated_image_from_contour(img, contour):
         coordinates from cv2.boxPoints
     """
     rotated_rect = cv2.minAreaRect(contour)
-
     # Get the center x,y and width and height.
     x_center = int(rotated_rect[0][0])
     y_center = int(rotated_rect[0][1])
@@ -75,7 +75,7 @@ def get_rotated_image_from_contour(img, contour):
     show_window('biggest_contour', img_debug_contour)
 
     img_debug = img.copy()
-    cv2.drawContours(img_debug, [np.int0(rect_box_points)], 0, (0, 0, 255), 3)
+    cv2.drawContours(img_debug, [np.int0(rect_box_points)], 0, (0, 255, 255), 3)
     show_window('min_area_rect_original_image', img_debug)
 
     # Prepare for rotation transformation
@@ -88,8 +88,9 @@ def get_rotated_image_from_contour(img, contour):
 
     # Affine rotation transformation
     ROTATION_MAT = cv2.getAffineTransform(src_pts[:3], dst_pts)
-    return cv2.warpAffine(
+    rotated =  cv2.warpAffine(
         img, ROTATION_MAT, (width, height))
+    return ndimage.rotate(rotated, 90)
 
 
 def get_com_shift(img):
