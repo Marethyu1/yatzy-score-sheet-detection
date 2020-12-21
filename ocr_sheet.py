@@ -190,8 +190,6 @@ def get_biggest_contour2(img, img_adaptive_binary):
 
     img_raw_contour = cv_utils.get_rotated_image_from_contour(img, biggest_contour, rotation=270)
 
-    cv_utils.show_window('img_raw_contour_222', img_raw_contour)
-
     img_raw_contour_rotated = resize_to_right_ratio(img_raw_contour)
     img_raw_black_and_white = get_image_as_black_and_white(img_raw_contour_rotated)
 
@@ -207,8 +205,6 @@ def generate_ti_sheet(img, num_rows_in_grid=19, max_num_cols=20):
     # Find the biggest contour and rotate it
     img_raw_contour_rotated, img_raw_black_and_white = get_biggest_contour(img, image_as_black_and_white)
 
-    cv_utils.show_window("raw_contour_rotated", img_raw_contour_rotated)
-    cv_utils.show_window("img_raw_b_w", img_raw_black_and_white)
 
     image_as_black_and_white = get_image_as_black_and_white(img_raw_contour_rotated, marker=50)
     cv_utils.show_window('img_black_and_white_2', image_as_black_and_white)
@@ -224,11 +220,11 @@ def generate_ti_sheet(img, num_rows_in_grid=19, max_num_cols=20):
     img_binary_grid, img_binary_only_numbers = get_yatzy_grid(img_raw_black_and_white)
 
     # Get every yatzy grid cell as a sorted bounding rect in order to later locate numbers to correct cell
-    yatzy_cells_bounding_rects, grid_bounding_rect = get_yatzy_cells_bounding_rects(img_binary_grid, num_rows_in_grid, max_num_cols)
+    yatzy_cells_bounding_rects, grid_bounding_rect = get_yatzy_cells_bounding_rects(img_binary_grid, 1, 2)
 
     # Get the area of the yatzy grid from different versions of raw img
     img_binary_only_numbers = cv_utils.get_bounding_rect_content(img_binary_only_numbers, grid_bounding_rect)
-    img_binary_yatzy_sheet = cv_utils.get_bounding_rect_content(img_binary_sheet_rotated, grid_bounding_rect)
+    img_binary_yatzy_sheet = cv_utils.get_bounding_rect_content(img_raw_black_and_white, grid_bounding_rect)
     img_yatzy_sheet = cv_utils.get_bounding_rect_content(img_raw_contour_rotated, grid_bounding_rect)
 
     return img_yatzy_sheet, img_binary_yatzy_sheet, img_binary_only_numbers, yatzy_cells_bounding_rects
@@ -358,20 +354,20 @@ def get_yatzy_cells_bounding_rects(img_binary_grid, num_rows_in_grid=19, max_num
 
     sheet_width = img_binary_grid.shape[1]
 
-    cell_min_width = (sheet_width/max_num_cols)
+    cell_min_width = (sheet_width/max_num_cols) -10
 
     # Clean grid from small contours
     yatzy_cells_bounding_rects = [cv2.boundingRect(cnt) for cnt in binary_grid_contours if cv_utils.wider_than(cnt, cell_min_width)]
 
     # Define resolution for cell area "bins"
-    cell_resolution = (sheet_width/50) ** 2
+    # cell_resolution = (sheet_width/50) ** 2
 
-    _, _, target_width, target_height = get_most_common_area(yatzy_cells_bounding_rects, cell_resolution)
+    # _, _, target_width, target_height = get_most_common_area(yatzy_cells_bounding_rects, cell_resolution)
 
-    if len(yatzy_cells_bounding_rects) < num_rows_in_grid:
-        print("ERROR: Not enough grid cells found.")
+    # if len(yatzy_cells_bounding_rects) < num_rows_in_grid:
+    #     print("ERROR: Not enough grid cells found.")
 
-    yatzy_cells_bounding_rects = list(filter(lambda x: __filter_by_dim(x, target_width, target_height), yatzy_cells_bounding_rects))
+    # yatzy_cells_bounding_rects = list(filter(lambda x: __filter_by_dim(x, target_width, target_height), yatzy_cells_bounding_rects))
 
     num_cells = len(yatzy_cells_bounding_rects)
     correct_num_cells_in_grid = (num_cells >= num_rows_in_grid and num_cells % num_rows_in_grid == 0)

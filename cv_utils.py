@@ -4,7 +4,7 @@ import os
 import numpy as np
 from scipy import ndimage
 
-DEBUG = True
+DEBUG = False
 
 
 def set_debug(debug):
